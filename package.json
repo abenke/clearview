@@ -1,0 +1,66 @@
+{
+  "name": "wysiwyg-markdown-editor",
+  "displayName": "WYSIWYG Markdown Editor",
+  "description": "A rich WYSIWYG markdown editor for VS Code with live preview and editing",
+  "version": "0.1.0",
+  "publisher": "wysiwyg-markdown",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:wysiwygMarkdown.openEditor",
+    "onCommand:wysiwygMarkdown.openEditorToSide"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "wysiwygMarkdown.openEditor",
+        "title": "Open WYSIWYG Markdown Editor",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "wysiwygMarkdown.openEditorToSide",
+        "title": "Open WYSIWYG Editor to the Side",
+        "icon": "$(open-preview)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "when": "resourceLangId == markdown",
+          "command": "wysiwygMarkdown.openEditorToSide",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "when": "resourceLangId == markdown",
+          "command": "wysiwygMarkdown.openEditor",
+          "group": "navigation"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "wysiwygMarkdown.openEditorToSide",
+        "key": "ctrl+shift+v",
+        "mac": "cmd+shift+v",
+        "when": "resourceLangId == markdown"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.0.0"
+  }
+}

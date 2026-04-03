@@ -1,6 +1,6 @@
 {
-  "name": "wysiwyg-markdown-editor",
-  "displayName": "WYSIWYG Markdown Editor",
+  "name": "clearview",
+  "displayName": "Clearview",
   "description": "A rich WYSIWYG markdown editor for VS Code with live preview and editing",
   "version": "0.1.0",
   "publisher": "wysiwyg-markdown",

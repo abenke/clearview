@@ -1,9 +1,9 @@
 {
   "name": "clearview",
   "displayName": "Clearview",
-  "description": "A rich WYSIWYG markdown editor for VS Code with live preview and editing",
+  "description": "A rich markdown editor for VS Code with live preview and editing",
   "version": "0.1.0",
-  "publisher": "wysiwyg-markdown",
+  "publisher": "clearview",
   "repository": {
     "type": "git",
     "url": "https://github.com/abenke/clearview"
@@ -15,20 +15,20 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:wysiwygMarkdown.openEditor",
-    "onCommand:wysiwygMarkdown.openEditorToSide"
+    "onCommand:clearview.openEditor",
+    "onCommand:clearview.openEditorToSide"
   ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "wysiwygMarkdown.openEditor",
-        "title": "Open WYSIWYG Markdown Editor",
+        "command": "clearview.openEditor",
+        "title": "Open Clearview Editor",
         "icon": "$(edit)"
       },
       {
-        "command": "wysiwygMarkdown.openEditorToSide",
-        "title": "Open WYSIWYG Editor to the Side",
+        "command": "clearview.openEditorToSide",
+        "title": "Open Clearview Editor to the Side",
         "icon": "$(open-preview)"
       }
     ],
@@ -36,21 +36,21 @@
       "editor/title": [
         {
           "when": "resourceLangId == markdown",
-          "command": "wysiwygMarkdown.openEditorToSide",
+          "command": "clearview.openEditorToSide",
           "group": "navigation"
         }
       ],
       "explorer/context": [
         {
           "when": "resourceLangId == markdown",
-          "command": "wysiwygMarkdown.openEditor",
+          "command": "clearview.openEditor",
           "group": "navigation"
         }
       ]
     },
     "keybindings": [
       {
-        "command": "wysiwygMarkdown.openEditorToSide",
+        "command": "clearview.openEditorToSide",
         "key": "ctrl+shift+v",
         "mac": "cmd+shift+v",
         "when": "resourceLangId == markdown"

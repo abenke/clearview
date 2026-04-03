@@ -1,6 +1,6 @@
-# WYSIWYG Markdown Editor for VS Code
+# Clearview — Markdown Editor for VS Code
 
-A rich text WYSIWYG editor for markdown files in Visual Studio Code. Edit markdown visually with a toolbar, keyboard shortcuts, and live sync back to the source file.
+A rich text markdown editor for Visual Studio Code. Edit markdown visually with a toolbar, keyboard shortcuts, and live sync back to the source file.
 
 ## Features
 
@@ -24,9 +24,9 @@ A rich text WYSIWYG editor for markdown files in Visual Studio Code. Edit markdo
 ## Usage
 
 1. Open any `.md` file in VS Code
-2. Run **"Open WYSIWYG Markdown Editor"** from the Command Palette (`Ctrl+Shift+P`)
+2. Run **"Open Clearview Editor"** from the Command Palette (`Ctrl+Shift+P`)
 3. Or click the preview icon in the editor title bar
-4. Or right-click a `.md` file in the Explorer and select **"Open WYSIWYG Markdown Editor"**
+4. Or right-click a `.md` file in the Explorer and select **"Open Clearview Editor"**
 
 ## Building from Source
 
@@ -46,10 +46,10 @@ npm run watch
 
 ### Option 1: F5 (Extension Development Host)
 
-1. Open the `wysiwyg-markdown-editor` folder in VS Code
+1. Open the `clearview` folder in VS Code
 2. Press `F5` to launch an Extension Development Host window
 3. In the new window, open any `.md` file
-4. Run the command **"Open WYSIWYG Markdown Editor"** from the Command Palette
+4. Run the command **"Open Clearview Editor"** from the Command Palette
 
 ### Option 2: Install as .vsix
 
@@ -61,7 +61,7 @@ npm install -g @vscode/vsce
 vsce package
 
 # Install it
-code --install-extension wysiwyg-markdown-editor-0.1.0.vsix
+code --install-extension clearview-0.1.0.vsix
 ```
 
 ## Project Structure

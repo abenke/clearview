@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>Test Harness</title></head>
+<body>
+    <div class="toolbar">
+        <select id="blockType">
+            <option value="p">Paragraph</option>
+            <option value="h1">Heading 1</option>
+            <option value="h2">Heading 2</option>
+            <option value="h3">Heading 3</option>
+            <option value="h4">Heading 4</option>
+            <option value="h5">Heading 5</option>
+            <option value="h6">Heading 6</option>
+        </select>
+        <button id="btnBold"></button>
+        <button id="btnItalic"></button>
+        <button id="btnStrike"></button>
+        <button id="btnCode"></button>
+        <button id="btnUl"></button>
+        <button id="btnOl"></button>
+        <button id="btnTaskList"></button>
+        <button id="btnIndent"></button>
+        <button id="btnOutdent"></button>
+        <button id="btnQuote"></button>
+        <button id="btnCodeBlock"></button>
+        <button id="btnHr"></button>
+        <button id="btnLink"></button>
+        <button id="btnImage"></button>
+        <button id="btnTable"></button>
+        <button id="btnUndo"></button>
+        <button id="btnRedo"></button>
+        <span id="status"></span>
+    </div>
+    <div class="editor-container">
+        <div id="editor" contenteditable="true"></div>
+        <div id="tableControls">
+            <button id="tblAddRowAbove"></button>
+            <button id="tblAddRowBelow"></button>
+            <button id="tblAddColLeft"></button>
+            <button id="tblAddColRight"></button>
+            <button id="tblDeleteRow"></button>
+            <button id="tblDeleteCol"></button>
+            <button id="tblDeleteTable"></button>
+        </div>
+    </div>
+    <div id="linkModal">
+        <input id="linkText"><input id="linkUrl">
+        <button id="linkCancel"></button><button id="linkInsert"></button>
+    </div>
+    <div id="imageModal">
+        <input id="imageAlt"><input id="imageUrl">
+        <button id="imageCancel"></button><button id="imageInsert"></button>
+    </div>
+    <script>
+        window.__messages = [];
+        window.acquireVsCodeApi = function () {
+            return {
+                postMessage: function (msg) { window.__messages.push(msg); },
+                getState: function () { return null; },
+                setState: function () {}
+            };
+        };
+    </script>
+    <script src="editor.js"></script>
+</body>
+</html>

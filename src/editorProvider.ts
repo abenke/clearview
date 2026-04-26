@@ -59,19 +59,38 @@ export class MarkdownEditorProvider {
             }
         });
 
-        // Sync when the file changes on disk (external editor, git, etc.)
-        const watcher = vscode.workspace.createFileSystemWatcher(filePath);
+        // Sync when the file changes on disk (external editor, git, etc.).
+        // Use RelativePattern so the watcher fires for files outside any
+        // workspace folder — a plain string glob is silently ignored there.
+        const watcher = vscode.workspace.createFileSystemWatcher(
+            new vscode.RelativePattern(
+                vscode.Uri.file(path.dirname(filePath)),
+                path.basename(filePath)
+            )
+        );
         const onDiskChange = async () => {
             if (isWriting) return;
-            // Force re-read from disk by opening the uri fresh
-            const bytes = await vscode.workspace.fs.readFile(uri!);
-            const text = Buffer.from(bytes).toString('utf8');
-            panel.webview.postMessage({
-                type: 'setContent',
-                markdown: text
-            });
+            try {
+                const bytes = await vscode.workspace.fs.readFile(uri!);
+                const text = Buffer.from(bytes).toString('utf8');
+                panel.webview.postMessage({
+                    type: 'setContent',
+                    markdown: text
+                });
+            } catch {
+                // File may have been temporarily removed during an atomic save
+            }
         };
         watcher.onDidChange(onDiskChange);
+        watcher.onDidCreate(onDiskChange);
+
+        // Reload when the panel becomes visible again, in case any change
+        // event was missed while it was hidden.
+        const visibilityListener = panel.onDidChangeViewState((e) => {
+            if (e.webviewPanel.visible) {
+                onDiskChange();
+            }
+        });
 
         // Handle messages from webview
         panel.webview.onDidReceiveMessage(
@@ -113,6 +132,7 @@ export class MarkdownEditorProvider {
             this.panels.delete(filePath);
             watcher.dispose();
             docChangeListener.dispose();
+            visibilityListener.dispose();
         });
     }
 

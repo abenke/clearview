@@ -218,6 +218,29 @@
         return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
+    // Repair list structure produced by browser execCommand quirks:
+    // 'indent' yields <ul><li/><ul/></ul>, 'outdent' yields <ul><li>x<li/></li></ul>.
+    // Lift orphan lists into the preceding li, and lift nested li out as siblings.
+    function normalizeListDom(root) {
+        let safety = 100;
+        let changed = true;
+        while (changed && safety-- > 0) {
+            changed = false;
+            root.querySelectorAll('li > li').forEach(function (innerLi) {
+                const outerLi = innerLi.parentNode;
+                outerLi.parentNode.insertBefore(innerLi, outerLi.nextSibling);
+                changed = true;
+            });
+            root.querySelectorAll('ul > ul, ul > ol, ol > ul, ol > ol').forEach(function (orphan) {
+                const prevLi = orphan.previousElementSibling;
+                if (prevLi && prevLi.tagName === 'LI') {
+                    prevLi.appendChild(orphan);
+                    changed = true;
+                }
+            });
+        }
+    }
+
     // ─── HTML → Markdown Serializer ──────────────────────────
     function htmlToMarkdown(element) {
         let md = '';
@@ -325,19 +348,23 @@
         depth = depth || 0;
         const indentStr = '  '.repeat(depth);
         let md = '';
-        const items = listEl.querySelectorAll(':scope > li');
-        items.forEach(function (li, idx) {
-            const prefix = type === 'ol' ? (idx + 1) + '. ' : '- ';
-
-            // Extract inline content without nested lists
-            const clone = li.cloneNode(true);
-            clone.querySelectorAll(':scope > ul, :scope > ol').forEach(function (n) { n.remove(); });
-            md += indentStr + prefix + getInlineMarkdown(clone).trim() + '\n';
-
-            // Recurse into nested lists
-            li.querySelectorAll(':scope > ul, :scope > ol').forEach(function (nested) {
-                md += serializeList(nested, nested.tagName.toLowerCase(), depth + 1);
-            });
+        let counter = 0;
+        // Iterate direct children: handles both well-formed (LI > UL/OL) and
+        // browser-quirk structures (UL > UL/OL, produced by execCommand('indent')).
+        Array.from(listEl.children).forEach(function (child) {
+            const childTag = child.tagName.toLowerCase();
+            if (childTag === 'li') {
+                counter++;
+                const prefix = type === 'ol' ? counter + '. ' : '- ';
+                const clone = child.cloneNode(true);
+                clone.querySelectorAll(':scope > ul, :scope > ol').forEach(function (n) { n.remove(); });
+                md += indentStr + prefix + getInlineMarkdown(clone).trim() + '\n';
+                child.querySelectorAll(':scope > ul, :scope > ol').forEach(function (nested) {
+                    md += serializeList(nested, nested.tagName.toLowerCase(), depth + 1);
+                });
+            } else if (childTag === 'ul' || childTag === 'ol') {
+                md += serializeList(child, childTag, depth + 1);
+            }
         });
         return md;
     }
@@ -373,7 +400,9 @@
         clearTimeout(saveTimeout);
         status.textContent = 'Editing...';
         saveTimeout = setTimeout(function () {
-            const markdown = htmlToMarkdown(editor).replace(/\n{3,}/g, '\n\n').trim() + '\n';
+            const snapshot = editor.cloneNode(true);
+            normalizeListDom(snapshot);
+            const markdown = htmlToMarkdown(snapshot).replace(/\n{3,}/g, '\n\n').trim() + '\n';
             isSaving = true;
             vscode.postMessage({ type: 'update', markdown: markdown });
             status.textContent = 'Saved';

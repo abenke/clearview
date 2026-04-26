@@ -357,10 +357,14 @@
                 counter++;
                 const prefix = type === 'ol' ? counter + '. ' : '- ';
                 const clone = child.cloneNode(true);
-                clone.querySelectorAll(':scope > ul, :scope > ol').forEach(function (n) { n.remove(); });
+                Array.from(clone.children).forEach(function (c) {
+                    if (c.tagName === 'UL' || c.tagName === 'OL') c.remove();
+                });
                 md += indentStr + prefix + getInlineMarkdown(clone).trim() + '\n';
-                child.querySelectorAll(':scope > ul, :scope > ol').forEach(function (nested) {
-                    md += serializeList(nested, nested.tagName.toLowerCase(), depth + 1);
+                Array.from(child.children).forEach(function (nested) {
+                    if (nested.tagName === 'UL' || nested.tagName === 'OL') {
+                        md += serializeList(nested, nested.tagName.toLowerCase(), depth + 1);
+                    }
                 });
             } else if (childTag === 'ul' || childTag === 'ol') {
                 md += serializeList(child, childTag, depth + 1);

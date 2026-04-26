@@ -119,18 +119,43 @@
         return html;
     }
 
+    function getIndentWidth(line) {
+        const match = line.match(/^([ \t]*)/);
+        if (!match) return 0;
+        let width = 0;
+        for (let k = 0; k < match[1].length; k++) {
+            width += match[1][k] === '\t' ? 4 : 1;
+        }
+        return width;
+    }
+
     function parseList(lines, start, tag) {
+        const baseIndent = getIndentWidth(lines[start]);
         let html = '<' + tag + '>';
         let i = start;
-        const itemPattern = tag === 'ul' ? /^\s*[-*+]\s(.*)/ : /^\s*\d+\.\s(.*)/;
 
         while (i < lines.length) {
-            const match = lines[i].match(itemPattern);
+            const line = lines[i];
+            const ulMatch = line.match(/^\s*[-*+]\s(.*)/);
+            const olMatch = line.match(/^\s*\d+\.\s(.*)/);
+            const match = ulMatch || olMatch;
             if (!match) break;
 
-            const content = match[1];
+            const indent = getIndentWidth(line);
+            if (indent < baseIndent) break;
 
-            // Check for task list
+            if (indent > baseIndent) {
+                const nestedTag = ulMatch ? 'ul' : 'ol';
+                const nested = parseList(lines, i, nestedTag);
+                html = html.replace(/<\/li>$/, nested.html + '</li>');
+                i = nested.end;
+                continue;
+            }
+
+            const lineTag = ulMatch ? 'ul' : 'ol';
+            if (lineTag !== tag) break;
+
+            const content = match[1];
             const taskMatch = content.match(/^\[([ xX])\]\s?(.*)/);
             if (taskMatch) {
                 const checked = taskMatch[1] !== ' ' ? ' checked' : '';
@@ -296,12 +321,23 @@
         return md;
     }
 
-    function serializeList(listEl, type) {
+    function serializeList(listEl, type, depth) {
+        depth = depth || 0;
+        const indentStr = '  '.repeat(depth);
         let md = '';
         const items = listEl.querySelectorAll(':scope > li');
         items.forEach(function (li, idx) {
             const prefix = type === 'ol' ? (idx + 1) + '. ' : '- ';
-            md += prefix + getInlineMarkdown(li).trim() + '\n';
+
+            // Extract inline content without nested lists
+            const clone = li.cloneNode(true);
+            clone.querySelectorAll(':scope > ul, :scope > ol').forEach(function (n) { n.remove(); });
+            md += indentStr + prefix + getInlineMarkdown(clone).trim() + '\n';
+
+            // Recurse into nested lists
+            li.querySelectorAll(':scope > ul, :scope > ol').forEach(function (nested) {
+                md += serializeList(nested, nested.tagName.toLowerCase(), depth + 1);
+            });
         });
         return md;
     }
@@ -384,6 +420,8 @@
 
     document.getElementById('btnUl').addEventListener('click', function () { execCmd('insertUnorderedList'); });
     document.getElementById('btnOl').addEventListener('click', function () { execCmd('insertOrderedList'); });
+    document.getElementById('btnIndent').addEventListener('click', function () { execCmd('indent'); });
+    document.getElementById('btnOutdent').addEventListener('click', function () { execCmd('outdent'); });
 
     document.getElementById('btnTaskList').addEventListener('click', function () {
         // Check if we're already inside a list item
@@ -732,14 +770,21 @@
             }
         }
 
-        // Tab in code blocks
-        if (e.key === 'Tab' && !e.shiftKey) {
+        // Tab: indent/outdent in lists, or insert spaces in code blocks
+        if (e.key === 'Tab') {
             const sel = window.getSelection();
             let node = sel.anchorNode;
             while (node && node !== editor) {
-                if (node.tagName === 'PRE' || node.tagName === 'CODE') {
+                if (node.tagName === 'LI') {
                     e.preventDefault();
-                    execCmd('insertText', '    ');
+                    execCmd(e.shiftKey ? 'outdent' : 'indent');
+                    return;
+                }
+                if (node.tagName === 'PRE' || node.tagName === 'CODE') {
+                    if (!e.shiftKey) {
+                        e.preventDefault();
+                        execCmd('insertText', '    ');
+                    }
                     return;
                 }
                 node = node.parentNode;

@@ -309,6 +309,10 @@ export class MarkdownEditorProvider {
             padding-left: 1.8em;
         }
 
+        #editor li ul, #editor li ol {
+            margin: 0.2em 0;
+        }
+
         #editor li { margin: 0.2em 0; }
 
         #editor hr {
@@ -491,6 +495,8 @@ export class MarkdownEditorProvider {
         <button id="btnUl" title="Bullet List">&#8226; List</button>
         <button id="btnOl" title="Numbered List">1. List</button>
         <button id="btnTaskList" title="Task List">&#9744; Task</button>
+        <button id="btnOutdent" title="Outdent (Shift+Tab)">&#8676;</button>
+        <button id="btnIndent" title="Indent (Tab)">&#8677;</button>
         <div class="separator"></div>
         <button id="btnQuote" title="Blockquote">&#8220; Quote</button>
         <button id="btnCodeBlock" title="Code Block">{ } Block</button>

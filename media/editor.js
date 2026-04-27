@@ -119,18 +119,43 @@
         return html;
     }
 
+    function getIndentWidth(line) {
+        const match = line.match(/^([ \t]*)/);
+        if (!match) return 0;
+        let width = 0;
+        for (let k = 0; k < match[1].length; k++) {
+            width += match[1][k] === '\t' ? 4 : 1;
+        }
+        return width;
+    }
+
     function parseList(lines, start, tag) {
+        const baseIndent = getIndentWidth(lines[start]);
         let html = '<' + tag + '>';
         let i = start;
-        const itemPattern = tag === 'ul' ? /^\s*[-*+]\s(.*)/ : /^\s*\d+\.\s(.*)/;
 
         while (i < lines.length) {
-            const match = lines[i].match(itemPattern);
+            const line = lines[i];
+            const ulMatch = line.match(/^\s*[-*+]\s(.*)/);
+            const olMatch = line.match(/^\s*\d+\.\s(.*)/);
+            const match = ulMatch || olMatch;
             if (!match) break;
 
-            const content = match[1];
+            const indent = getIndentWidth(line);
+            if (indent < baseIndent) break;
 
-            // Check for task list
+            if (indent > baseIndent) {
+                const nestedTag = ulMatch ? 'ul' : 'ol';
+                const nested = parseList(lines, i, nestedTag);
+                html = html.replace(/<\/li>$/, nested.html + '</li>');
+                i = nested.end;
+                continue;
+            }
+
+            const lineTag = ulMatch ? 'ul' : 'ol';
+            if (lineTag !== tag) break;
+
+            const content = match[1];
             const taskMatch = content.match(/^\[([ xX])\]\s?(.*)/);
             if (taskMatch) {
                 const checked = taskMatch[1] !== ' ' ? ' checked' : '';
@@ -191,6 +216,29 @@
 
     function escapeHtml(text) {
         return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // Repair list structure produced by browser execCommand quirks:
+    // 'indent' yields <ul><li/><ul/></ul>, 'outdent' yields <ul><li>x<li/></li></ul>.
+    // Lift orphan lists into the preceding li, and lift nested li out as siblings.
+    function normalizeListDom(root) {
+        let safety = 100;
+        let changed = true;
+        while (changed && safety-- > 0) {
+            changed = false;
+            root.querySelectorAll('li > li').forEach(function (innerLi) {
+                const outerLi = innerLi.parentNode;
+                outerLi.parentNode.insertBefore(innerLi, outerLi.nextSibling);
+                changed = true;
+            });
+            root.querySelectorAll('ul > ul, ul > ol, ol > ul, ol > ol').forEach(function (orphan) {
+                const prevLi = orphan.previousElementSibling;
+                if (prevLi && prevLi.tagName === 'LI') {
+                    prevLi.appendChild(orphan);
+                    changed = true;
+                }
+            });
+        }
     }
 
     // ─── HTML → Markdown Serializer ──────────────────────────
@@ -296,12 +344,31 @@
         return md;
     }
 
-    function serializeList(listEl, type) {
+    function serializeList(listEl, type, depth) {
+        depth = depth || 0;
+        const indentStr = '  '.repeat(depth);
         let md = '';
-        const items = listEl.querySelectorAll(':scope > li');
-        items.forEach(function (li, idx) {
-            const prefix = type === 'ol' ? (idx + 1) + '. ' : '- ';
-            md += prefix + getInlineMarkdown(li).trim() + '\n';
+        let counter = 0;
+        // Iterate direct children: handles both well-formed (LI > UL/OL) and
+        // browser-quirk structures (UL > UL/OL, produced by execCommand('indent')).
+        Array.from(listEl.children).forEach(function (child) {
+            const childTag = child.tagName.toLowerCase();
+            if (childTag === 'li') {
+                counter++;
+                const prefix = type === 'ol' ? counter + '. ' : '- ';
+                const clone = child.cloneNode(true);
+                Array.from(clone.children).forEach(function (c) {
+                    if (c.tagName === 'UL' || c.tagName === 'OL') c.remove();
+                });
+                md += indentStr + prefix + getInlineMarkdown(clone).trim() + '\n';
+                Array.from(child.children).forEach(function (nested) {
+                    if (nested.tagName === 'UL' || nested.tagName === 'OL') {
+                        md += serializeList(nested, nested.tagName.toLowerCase(), depth + 1);
+                    }
+                });
+            } else if (childTag === 'ul' || childTag === 'ol') {
+                md += serializeList(child, childTag, depth + 1);
+            }
         });
         return md;
     }
@@ -337,7 +404,9 @@
         clearTimeout(saveTimeout);
         status.textContent = 'Editing...';
         saveTimeout = setTimeout(function () {
-            const markdown = htmlToMarkdown(editor).replace(/\n{3,}/g, '\n\n').trim() + '\n';
+            const snapshot = editor.cloneNode(true);
+            normalizeListDom(snapshot);
+            const markdown = htmlToMarkdown(snapshot).replace(/\n{3,}/g, '\n\n').trim() + '\n';
             isSaving = true;
             vscode.postMessage({ type: 'update', markdown: markdown });
             status.textContent = 'Saved';
@@ -384,6 +453,8 @@
 
     document.getElementById('btnUl').addEventListener('click', function () { execCmd('insertUnorderedList'); });
     document.getElementById('btnOl').addEventListener('click', function () { execCmd('insertOrderedList'); });
+    document.getElementById('btnIndent').addEventListener('click', function () { execCmd('indent'); });
+    document.getElementById('btnOutdent').addEventListener('click', function () { execCmd('outdent'); });
 
     document.getElementById('btnTaskList').addEventListener('click', function () {
         // Check if we're already inside a list item
@@ -732,14 +803,21 @@
             }
         }
 
-        // Tab in code blocks
-        if (e.key === 'Tab' && !e.shiftKey) {
+        // Tab: indent/outdent in lists, or insert spaces in code blocks
+        if (e.key === 'Tab') {
             const sel = window.getSelection();
             let node = sel.anchorNode;
             while (node && node !== editor) {
-                if (node.tagName === 'PRE' || node.tagName === 'CODE') {
+                if (node.tagName === 'LI') {
                     e.preventDefault();
-                    execCmd('insertText', '    ');
+                    execCmd(e.shiftKey ? 'outdent' : 'indent');
+                    return;
+                }
+                if (node.tagName === 'PRE' || node.tagName === 'CODE') {
+                    if (!e.shiftKey) {
+                        e.preventDefault();
+                        execCmd('insertText', '    ');
+                    }
                     return;
                 }
                 node = node.parentNode;

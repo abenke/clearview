@@ -8,6 +8,18 @@
     let ignoreNextInput = false;
     let savedRange = null;
     let isSaving = false; // flag to ignore watcher events triggered by our own saves
+    let currentFrontMatter = ''; // YAML front matter preserved on save but hidden in preview
+    let mermaidCounter = 0;
+
+    if (typeof mermaid !== 'undefined') {
+        const isLight = document.body.classList.contains('vscode-light') ||
+            document.body.classList.contains('vscode-high-contrast-light');
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: isLight ? 'default' : 'dark',
+            securityLevel: 'strict'
+        });
+    }
 
     function saveSelection() {
         const sel = window.getSelection();
@@ -37,14 +49,21 @@
             // Fenced code block
             if (/^```/.test(line)) {
                 const lang = line.slice(3).trim();
-                const codeLines = [];
+                const rawLines = [];
                 i++;
                 while (i < lines.length && !/^```/.test(lines[i])) {
-                    codeLines.push(escapeHtml(lines[i]));
+                    rawLines.push(lines[i]);
                     i++;
                 }
                 i++; // skip closing
-                html += '<pre><code' + (lang ? ' class="language-' + lang + '"' : '') + '>' + codeLines.join('\n') + '</code></pre>';
+                if (lang === 'mermaid') {
+                    const source = rawLines.join('\n');
+                    html += '<div class="mermaid-block" contenteditable="false" data-source="' +
+                        encodeURIComponent(source) + '"></div>';
+                } else {
+                    const codeLines = rawLines.map(escapeHtml);
+                    html += '<pre><code' + (lang ? ' class="language-' + lang + '"' : '') + '>' + codeLines.join('\n') + '</code></pre>';
+                }
                 continue;
             }
 
@@ -218,6 +237,41 @@
         return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
+    // Split YAML front matter from the body. Front matter is a block
+    // delimited by `---` lines at the very start of the document; it is
+    // hidden from the WYSIWYG preview but preserved across saves.
+    function extractFrontMatter(md) {
+        const match = md.match(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/);
+        if (match) {
+            return { frontMatter: match[0], body: md.slice(match[0].length) };
+        }
+        return { frontMatter: '', body: md };
+    }
+
+    function renderMermaidBlocks(root) {
+        if (typeof mermaid === 'undefined') return;
+        const blocks = root.querySelectorAll('.mermaid-block');
+        blocks.forEach(function (el) {
+            const source = decodeURIComponent(el.getAttribute('data-source') || '');
+            const id = 'clearview-mermaid-' + (++mermaidCounter);
+            try {
+                const result = mermaid.render(id, source);
+                Promise.resolve(result).then(function (out) {
+                    el.innerHTML = out && out.svg ? out.svg : '';
+                    if (out && typeof out.bindFunctions === 'function') {
+                        out.bindFunctions(el);
+                    }
+                }).catch(function (err) {
+                    el.innerHTML = '<pre class="mermaid-error">' +
+                        escapeHtml(String(err && (err.message || err.str) || err)) + '</pre>';
+                });
+            } catch (err) {
+                el.innerHTML = '<pre class="mermaid-error">' +
+                    escapeHtml(String(err && (err.message || err.str) || err)) + '</pre>';
+            }
+        });
+    }
+
     // Repair list structure produced by browser execCommand quirks:
     // 'indent' yields <ul><li/><ul/></ul>, 'outdent' yields <ul><li>x<li/></li></ul>.
     // Lift orphan lists into the preceding li, and lift nested li out as siblings.
@@ -286,7 +340,14 @@
                 case 'hr': md += '---\n\n'; break;
                 case 'table': md += serializeTable(node) + '\n\n'; break;
                 case 'br': md += '\n'; break;
-                case 'div': md += htmlToMarkdown(node) + '\n'; break;
+                case 'div':
+                    if (node.classList && node.classList.contains('mermaid-block')) {
+                        const src = decodeURIComponent(node.getAttribute('data-source') || '');
+                        md += '```mermaid\n' + src + '\n```\n\n';
+                    } else {
+                        md += htmlToMarkdown(node) + '\n';
+                    }
+                    break;
                 default: md += getInlineMarkdown(node); break;
             }
         }
@@ -406,7 +467,8 @@
         saveTimeout = setTimeout(function () {
             const snapshot = editor.cloneNode(true);
             normalizeListDom(snapshot);
-            const markdown = htmlToMarkdown(snapshot).replace(/\n{3,}/g, '\n\n').trim() + '\n';
+            const body = htmlToMarkdown(snapshot).replace(/\n{3,}/g, '\n\n').trim() + '\n';
+            const markdown = currentFrontMatter ? currentFrontMatter + body : body;
             isSaving = true;
             vscode.postMessage({ type: 'update', markdown: markdown });
             status.textContent = 'Saved';
@@ -789,6 +851,155 @@
         }
     });
 
+    // ─── Find (Ctrl+F) ───────────────────────────────────────
+    const findBar = document.getElementById('findBar');
+    const findInput = document.getElementById('findInput');
+    const findStatus = document.getElementById('findStatus');
+    const supportsHighlights = typeof CSS !== 'undefined' && CSS.highlights && typeof Highlight === 'function';
+    const findHighlight = supportsHighlights ? new Highlight() : null;
+    const findCurrentHighlight = supportsHighlights ? new Highlight() : null;
+    if (supportsHighlights) {
+        CSS.highlights.set('clearview-find', findHighlight);
+        CSS.highlights.set('clearview-find-current', findCurrentHighlight);
+    }
+    let findMatches = [];
+    let findIndex = -1;
+
+    function clearFindHighlights() {
+        if (findHighlight) findHighlight.clear();
+        if (findCurrentHighlight) findCurrentHighlight.clear();
+        findMatches = [];
+        findIndex = -1;
+    }
+
+    function updateFindStatus() {
+        if (!findInput.value) {
+            findStatus.textContent = '';
+        } else if (findMatches.length === 0) {
+            findStatus.textContent = 'No results';
+        } else {
+            findStatus.textContent = (findIndex + 1) + ' of ' + findMatches.length;
+        }
+    }
+
+    function focusFindMatch(idx) {
+        if (!findMatches.length) return;
+        findIndex = ((idx % findMatches.length) + findMatches.length) % findMatches.length;
+        if (findCurrentHighlight) {
+            findCurrentHighlight.clear();
+            findCurrentHighlight.add(findMatches[findIndex]);
+        }
+        const range = findMatches[findIndex];
+        const rect = range.getBoundingClientRect();
+        const container = editor.parentElement;
+        const containerRect = container.getBoundingClientRect();
+        if (rect.top < containerRect.top + 40 || rect.bottom > containerRect.bottom - 40) {
+            container.scrollTop += rect.top - containerRect.top - containerRect.height / 2;
+        }
+        updateFindStatus();
+    }
+
+    function runFind(query) {
+        clearFindHighlights();
+        if (!query) {
+            updateFindStatus();
+            return;
+        }
+        const q = query.toLowerCase();
+        const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT, {
+            acceptNode: function (node) {
+                // Skip text inside mermaid blocks (rendered SVG/source data)
+                let p = node.parentNode;
+                while (p && p !== editor) {
+                    if (p.classList && p.classList.contains('mermaid-block')) {
+                        return NodeFilter.FILTER_REJECT;
+                    }
+                    p = p.parentNode;
+                }
+                return NodeFilter.FILTER_ACCEPT;
+            }
+        });
+        let node;
+        while ((node = walker.nextNode())) {
+            const text = node.textContent;
+            const lower = text.toLowerCase();
+            let from = 0;
+            while (from <= lower.length) {
+                const idx = lower.indexOf(q, from);
+                if (idx === -1) break;
+                const range = document.createRange();
+                range.setStart(node, idx);
+                range.setEnd(node, idx + query.length);
+                findMatches.push(range);
+                if (findHighlight) findHighlight.add(range);
+                from = idx + Math.max(query.length, 1);
+            }
+        }
+        if (findMatches.length) {
+            focusFindMatch(0);
+        } else {
+            updateFindStatus();
+        }
+    }
+
+    function openFind() {
+        findBar.classList.add('visible');
+        const sel = window.getSelection();
+        const selText = sel && sel.toString();
+        if (selText && selText.length < 200) {
+            findInput.value = selText;
+        }
+        findInput.focus();
+        findInput.select();
+        if (findInput.value) runFind(findInput.value);
+    }
+
+    function closeFind() {
+        findBar.classList.remove('visible');
+        clearFindHighlights();
+        findStatus.textContent = '';
+        editor.focus();
+    }
+
+    findInput.addEventListener('input', function () {
+        runFind(findInput.value);
+    });
+
+    findInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (!findMatches.length) return;
+            focusFindMatch(findIndex + (e.shiftKey ? -1 : 1));
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            closeFind();
+        }
+    });
+
+    document.getElementById('findNext').addEventListener('click', function () {
+        if (findMatches.length) focusFindMatch(findIndex + 1);
+        findInput.focus();
+    });
+    document.getElementById('findPrev').addEventListener('click', function () {
+        if (findMatches.length) focusFindMatch(findIndex - 1);
+        findInput.focus();
+    });
+    document.getElementById('findClose').addEventListener('click', closeFind);
+
+    document.addEventListener('keydown', function (e) {
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
+            e.preventDefault();
+            openFind();
+        } else if (e.key === 'F3') {
+            e.preventDefault();
+            if (!findBar.classList.contains('visible')) {
+                openFind();
+            } else if (findMatches.length) {
+                focusFindMatch(findIndex + (e.shiftKey ? -1 : 1));
+            }
+        }
+    });
+
     // ─── Keyboard Shortcuts ──────────────────────────────────
     editor.addEventListener('keydown', function (e) {
         if (e.ctrlKey || e.metaKey) {
@@ -848,7 +1059,19 @@
                 savedOffset = preRange.toString().length;
             }
 
-            editor.innerHTML = markdownToHtml(message.markdown);
+            const split = extractFrontMatter(message.markdown);
+            currentFrontMatter = split.frontMatter;
+            editor.innerHTML = markdownToHtml(split.body);
+            renderMermaidBlocks(editor);
+            // Stale ranges point at the previous DOM; refresh or drop them.
+            if (findMatches.length) {
+                if (findBar.classList.contains('visible') && findInput.value) {
+                    runFind(findInput.value);
+                } else {
+                    clearFindHighlights();
+                    findStatus.textContent = '';
+                }
+            }
 
             // Restore approximate cursor position
             try {

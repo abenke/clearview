@@ -389,6 +389,76 @@ export class MarkdownEditorProvider {
             margin-left: -1.2em;
         }
 
+        /* Find bar */
+        .find-bar {
+            display: none;
+            position: absolute;
+            top: 8px;
+            right: 24px;
+            z-index: 200;
+            background: var(--toolbar-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 4px 6px;
+            gap: 4px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            align-items: center;
+        }
+
+        .find-bar.visible {
+            display: flex;
+        }
+
+        .find-bar input {
+            background: var(--bg);
+            color: var(--fg);
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            padding: 3px 8px;
+            font-size: 12px;
+            font-family: var(--font);
+            width: 180px;
+            outline: none;
+        }
+
+        .find-bar input:focus {
+            border-color: var(--accent);
+        }
+
+        .find-bar .find-status {
+            font-size: 11px;
+            opacity: 0.7;
+            min-width: 48px;
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        .find-bar button {
+            background: transparent;
+            color: var(--fg);
+            border: 1px solid transparent;
+            border-radius: 3px;
+            padding: 2px 6px;
+            cursor: pointer;
+            font-size: 12px;
+            min-width: 22px;
+        }
+
+        .find-bar button:hover {
+            background: var(--btn-hover);
+            border-color: var(--border);
+        }
+
+        ::highlight(clearview-find) {
+            background-color: rgba(247, 215, 91, 0.4);
+            color: inherit;
+        }
+
+        ::highlight(clearview-find-current) {
+            background-color: rgba(247, 165, 0, 0.7);
+            color: #000;
+        }
+
         /* Table controls */
         .table-controls {
             display: none;
@@ -542,6 +612,13 @@ export class MarkdownEditorProvider {
     </div>
 
     <div class="editor-container">
+        <div class="find-bar" id="findBar">
+            <input type="text" id="findInput" placeholder="Find" spellcheck="false">
+            <span class="find-status" id="findStatus"></span>
+            <button id="findPrev" title="Previous (Shift+Enter)">&#8593;</button>
+            <button id="findNext" title="Next (Enter)">&#8595;</button>
+            <button id="findClose" title="Close (Esc)">&#10005;</button>
+        </div>
         <div id="editor" contenteditable="true" spellcheck="true"></div>
         <div class="table-controls" id="tableControls">
             <button id="tblAddRowAbove" title="Add row above">+ Row &#8593;</button>

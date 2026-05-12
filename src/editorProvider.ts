@@ -141,13 +141,16 @@ export class MarkdownEditorProvider {
         const scriptUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this.context.extensionUri, 'media', 'editor.js')
         );
+        const mermaidUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this.context.extensionUri, 'media', 'mermaid.min.js')
+        );
 
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' ${webview.cspSource}; script-src 'nonce-${nonce}';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} data:; style-src 'unsafe-inline' ${webview.cspSource}; script-src 'nonce-${nonce}'; font-src ${webview.cspSource} data:;">
     <title>Clearview Editor</title>
     <style>
         :root {
@@ -354,6 +357,33 @@ export class MarkdownEditorProvider {
             cursor: pointer;
         }
 
+        #editor .mermaid-block {
+            display: flex;
+            justify-content: center;
+            margin: 0.8em 0;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: rgba(128, 128, 128, 0.08);
+            overflow-x: auto;
+            user-select: none;
+        }
+
+        #editor .mermaid-block svg {
+            max-width: 100%;
+            height: auto;
+        }
+
+        #editor .mermaid-block .mermaid-error {
+            color: #e57373;
+            background: rgba(220, 50, 50, 0.08);
+            border: 1px solid rgba(220, 50, 50, 0.3);
+            border-radius: 4px;
+            padding: 8px 12px;
+            white-space: pre-wrap;
+            user-select: text;
+        }
+
         #editor li:has(> input[type="checkbox"]) {
             list-style: none;
             margin-left: -1.2em;
@@ -557,6 +587,7 @@ export class MarkdownEditorProvider {
         </div>
     </div>
 
+    <script nonce="${nonce}" src="${mermaidUri}"></script>
     <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

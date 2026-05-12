@@ -20,7 +20,7 @@ const repoRoot = join(__dirname, '..');
 const harnessHtml = readFileSync(join(__dirname, 'harness.html'), 'utf8')
     .replace('<script src="editor.js"></script>', '');
 const editorSrc = readFileSync(join(repoRoot, 'media', 'editor.js'), 'utf8');
-const expose = '    window.__test = { markdownToHtml, htmlToMarkdown, normalizeListDom };\n';
+const expose = '    window.__test = { markdownToHtml, htmlToMarkdown, normalizeListDom, extractFrontMatter };\n';
 const patched = editorSrc.replace(/}\)\(\);\s*$/, expose + '})();\n');
 if (patched === editorSrc) {
     console.error('Failed to inject test exposure into editor.js (IIFE pattern not found).');
@@ -30,7 +30,7 @@ if (patched === editorSrc) {
 const dom = new JSDOM(harnessHtml, { runScripts: 'dangerously' });
 const { window } = dom;
 window.eval(patched);
-const { markdownToHtml, htmlToMarkdown, normalizeListDom } = window.__test;
+const { markdownToHtml, htmlToMarkdown, normalizeListDom, extractFrontMatter } = window.__test;
 const { document } = window;
 
 const results = [];
@@ -128,6 +128,71 @@ check(
         'round-trip: task items inside nested list',
         out.includes('- a') && /  - \[x\] +done/.test(out) && /  - \[ \] +todo/.test(out),
         out
+    );
+}
+
+// Mermaid: parser emits a placeholder div with the source preserved
+{
+    const html = markdownToHtml('```mermaid\ngraph TD\nA-->B\n```\n');
+    check(
+        'parse: mermaid block becomes placeholder div',
+        /<div class="mermaid-block"[^>]*data-source="graph%20TD%0AA--%3EB"[^>]*>/.test(html),
+        html
+    );
+}
+{
+    // Round-trip: rendered placeholder serializes back to the fenced source
+    const out = serialize('<div class="mermaid-block" data-source="graph%20TD%0AA--%3EB"></div>');
+    check(
+        'round-trip: mermaid placeholder → fenced code',
+        out.trim() === '```mermaid\ngraph TD\nA-->B\n```',
+        out
+    );
+}
+{
+    // Non-mermaid fenced blocks still go through the normal path
+    const html = markdownToHtml('```js\nconst x = 1;\n```\n');
+    check(
+        'parse: non-mermaid fenced block unchanged',
+        /<pre><code class="language-js">const x = 1;<\/code><\/pre>/.test(html),
+        html
+    );
+}
+
+// Front matter: extractFrontMatter splits the leading YAML block
+{
+    const r = extractFrontMatter('---\ntitle: Hello\ntags: [a, b]\n---\n# Body\n');
+    check(
+        'front matter: extracted and stripped from body',
+        r.frontMatter === '---\ntitle: Hello\ntags: [a, b]\n---\n' && r.body === '# Body\n',
+        JSON.stringify(r)
+    );
+}
+{
+    const r = extractFrontMatter('# No front matter\n');
+    check(
+        'front matter: passthrough when absent',
+        r.frontMatter === '' && r.body === '# No front matter\n',
+        JSON.stringify(r)
+    );
+}
+{
+    // A leading `---` that is actually a horizontal rule (no closing fence) is not front matter
+    const r = extractFrontMatter('---\nnot front matter\n# Body\n');
+    check(
+        'front matter: leading --- without closing fence is not extracted',
+        r.frontMatter === '' && r.body === '---\nnot front matter\n# Body\n',
+        JSON.stringify(r)
+    );
+}
+{
+    // The body that follows is parsed normally and front matter does not leak into the HTML
+    const r = extractFrontMatter('---\nfoo: bar\n---\n# Body\n');
+    const html = markdownToHtml(r.body);
+    check(
+        'front matter: not rendered in HTML',
+        !html.includes('foo: bar') && /<h1>Body<\/h1>/.test(html),
+        html
     );
 }
 
